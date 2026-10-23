@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d1d1d; --muted: #6b6b6b; --line: #c9c9c9;
+    --bar: #f3f1ec; --btn: #ffffff; --btn-on: #2f5d50; --btn-on-fg: #ffffff; --th: #f0ede6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212; --fg: #e9e9e9; --muted: #9a9a9a; --line: #4a4a4a;
+      --bar: #1e1e1e; --btn: #2a2a2a; --btn-on: #6fae9b; --btn-on-fg: #0d0d0d; --th: #262626;
+    }
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body { font: 16px/1.5 system-ui, Roboto, sans-serif; }
+
+  #bar {
+    position: sticky; top: 0; z-index: 2;
+    display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    padding: 8px 10px; background: var(--bar); border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
+  }
+  #bar::-webkit-scrollbar { display: none; }
+  #bar button {
+    flex: 0 0 auto; min-width: 40px; height: 38px; padding: 0 10px;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--btn); color: var(--fg); font: 600 15px system-ui, Roboto, sans-serif;
+  }
+  #bar button.on { background: var(--btn-on); color: var(--btn-on-fg); border-color: var(--btn-on); }
+  #bar .sep { flex: 0 0 1px; background: var(--line); margin: 4px 2px; }
+
+  #ed, #src {
+    display: block; box-sizing: border-box; width: 100%;
+    min-height: calc(100vh - 56px); padding: 12px 16px 40vh; outline: none;
+  }
+  #ed:empty::before { content: "Start writing… use the toolbar for headings, lists and tables."; color: var(--muted); }
+  #src {
+    display: none; border: 0; resize: none; background: var(--bg); color: var(--fg);
+    font: 14px/1.45 ui-monospace, monospace;
+  }
+  body.source #src { display: block; }
+  body.source #ed { display: none; }
+  body.source #bar button:not([data-keep]) { opacity: .35; pointer-events: none; }
+
+  #ed h1 { font-size: 1.6em; margin: .6em 0 .3em; }
+  #ed h2 { font-size: 1.3em; margin: .6em 0 .3em; }
+  #ed h3 { font-size: 1.1em; margin: .6em 0 .3em; }
+  #ed p { margin: .4em 0; }
+  #ed blockquote { border-left: 3px solid var(--line); margin: .6em 0; padding-left: 12px; color: var(--muted); }
+  #ed a { color: var(--btn-on); }
+  #ed img { max-width: 100%; }
+  #ed table { border-collapse: collapse; margin: .7em 0; display: block; overflow-x: auto; max-width: 100%; }
+  #ed th, #ed td { border: 1px solid var(--line); padding: 6px 9px; min-width: 3.5em; vertical-align: top; }
+  #ed th { background: var(--th); text-align: left; }
+  #ed hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <button data-cmd="undo" aria-label="Undo">↶</button>
+  <button data-cmd="redo" aria-label="Redo">↷</button>
+  <span class="sep"></span>
+  <button data-block="h1">H1</button>
+  <button data-block="h2">H2</button>
+  <button data-block="h3">H3</button>
+  <button data-block="p" aria-label="Normal text">¶</button>
+  <span class="sep"></span>
+  <button data-cmd="bold" data-state="bold"><b>B</b></button>
+  <button data-cmd="italic" data-state="italic"><i>I</i></button>
+  <button data-cmd="underline" data-state="underline"><u>U</u></button>
+  <button data-cmd="strikeThrough" data-state="strikeThrough"><s>S</s></button>
+  <span class="sep"></span>
+  <button data-cmd="insertUnorderedList" data-state="insertUnorderedList" aria-label="Bullet list">• List</button>
+  <button data-cmd="insertOrderedList" data-state="insertOrderedList" aria-label="Numbered list">1. List</button>
+  <button data-block="blockquote" aria-label="Quote">❝</button>
+  <span class="sep"></span>
+  <button data-act="table">⊞ Table</button>
+  <button data-act="rowAdd">+ Row</button>
+  <button data-act="colAdd">+ Col</button>
+  <button data-act="rowDel">− Row</button>
+  <button data-act="colDel">− Col</button>
+  <span class="sep"></span>
+  <button data-act="link">🔗 Link</button>
+  <button data-act="hr" aria-label="Divider">―</button>
+  <button data-cmd="removeFormat" aria-label="Clear formatting">⌫ Fmt</button>
+</div>
+<div id="ed" contenteditable="true" spellcheck="true"></div>
+<textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
+
+<script>
+(function () {
+  var ed = document.getElementById('ed');
+  var src = document.getElementById('src');
+  var bar = document.getElementById('bar');
+  var sourceMode = false;
+  var savedRange = null;
+
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) {}
+
+  function current() { return sourceMode ? src.value : ed.innerHTML; }
+
+  function notify() {
+    if (window.Android && Android.onChange) Android.onChange(current());
+    updateState();
+  }
+
+  window.setContent = function (html) {
+    ed.innerHTML = html || '';
+    src.value = ed.innerHTML;
+    updateState();
+  };
+  window.getContent = current;
+
+  window.toggleSource = function () {
+    if (sourceMode) {
+      ed.innerHTML = src.value;
+      sourceMode = false;
+      document.body.classList.remove('source');
+      ed.focus();
+    } else {
+      src.value = ed.innerHTML;
+      sourceMode = true;
+      document.body.classList.add('source');
+      src.focus();
+    }
+    notify();
+  };
+
+  ed.addEventListener('input', notify);
+  src.addEventListener('input', notify);
+
+  // ---- selection helpers ----
+  function saveSel() {
+    var s = window.getSelection();
+    if (s.rangeCount && ed.contains(s.anchorNode)) savedRange = s.getRangeAt(0).cloneRange();
+  }
+  function restoreSel() {
+    ed.focus();
+    if (savedRange) {
+      var s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(savedRange);
+    }
+  }
+  document.addEventListener('selectionchange', function () { saveSel(); updateState(); });
+
+  function cellAtCaret() {
+    var s = window.getSelection();
+    var n = s.rangeCount ? s.anchorNode : null;
+    if (!n && savedRange) n = savedRange.startContainer;
+    if (!n || !ed.contains(n)) return null;
+    if (n.nodeType === 3) n = n.parentNode;
+    return n.closest ? n.closest('td,th') : null;
+  }
+
+  function placeCaret(el) {
+    var r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(true);
+    var s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+
+  function emptyCell(tag) {
+    var c = document.createElement(tag);
+    c.appendChild(document.createElement('br'));
+    return c;
+  }
+
+  // ---- table actions ----
+  var acts = {
+    table: function () {
+      var cols = 3, rows = 3, h = '<table><thead><tr>';
+      for (var c = 0; c < cols; c++) h += '<th>Heading</th>';
+      h += '</tr></thead><tbody>';
+      for (var r = 0; r < rows - 1; r++) {
+        h += '<tr>';
+        for (var c2 = 0; c2 < cols; c2++) h += '<td><br></td>';
+        h += '</tr>';
+      }
+      h += '</tbody></table><p><br></p>';
+      document.execCommand('insertHTML', false, h);
+    },
+    rowAdd: function () {
+      var cell = cellAtCaret(); if (!cell) return hint();
+      var tr = cell.parentNode, table = tr.closest('table');
+      var n = tr.cells.length, row = document.createElement('tr');
+      for (var i = 0; i < n; i++) row.appendChild(emptyCell('td'));
+      if (tr.parentNode.tagName === 'THEAD') {
+        var body = table.tBodies[0] || table.appendChild(document.createElement('tbody'));
+        body.insertBefore(row, body.firstChild);
+      } else {
+        tr.parentNode.insertBefore(row, tr.nextSibling);
+      }
+      placeCaret(row.cells[0]);
+    },
+    colAdd: function () {
+      var cell = cellAtCaret(); if (!cell) return hint();
+      var idx = cell.cellIndex, table = cell.closest('table');
+      for (var i = 0; i < table.rows.length; i++) {
+        var tr = table.rows[i];
+        var tag = tr.parentNode.tagName === 'THEAD' ? 'th' : 'td';
+        var ref = tr.cells[idx + 1] || null;
+        tr.insertBefore(emptyCell(tag), ref);
+      }
+      placeCaret(cell.parentNode.cells[idx + 1]);
+    },
+    rowDel: function () {
+      var cell = cellAtCaret(); if (!cell) return hint();
+      var tr = cell.parentNode, table = tr.closest('table');
+      if (table.rows.length <= 1) { table.remove(); return; }
+      var idx = cell.cellIndex, ri = tr.rowIndex;
+      tr.remove();
+      var next = table.rows[Math.min(ri, table.rows.length - 1)];
+      placeCaret(next.cells[Math.min(idx, next.cells.length - 1)]);
+    },
+    colDel: function () {
+      var cell = cellAtCaret(); if (!cell) return hint();
+      var idx = cell.cellIndex, table = cell.closest('table');
+      if (table.rows[0].cells.length <= 1) { table.remove(); return; }
+      var row = cell.parentNode;
+      for (var i = 0; i < table.rows.length; i++) {
+        var c = table.rows[i].cells[idx];
+        if (c) c.remove();
+      }
+      placeCaret(row.cells[Math.min(idx, row.cells.length - 1)]);
+    },
+    link: function () {
+      var url = window.prompt('Link address', 'https://');
+      restoreSel();
+      if (!url || url === 'https://') return;
+      var s = window.getSelection();
+      if (s.isCollapsed) {
+        var a = document.createElement('a');
+        a.href = url; a.textContent = url;
+        document.execCommand('insertHTML', false, a.outerHTML + '&nbsp;');
+      } else {
+        document.execCommand('createLink', false, url);
+      }
+    },
+    hr: function () { document.execCommand('insertHorizontalRule'); }
+  };
+
+  function hint() {
+    var old = ed.getAttribute('data-hint');
+    if (old) return;
+    var b = bar.querySelector('[data-act="rowAdd"]');
+    b.textContent = 'Tap a cell first';
+    ed.setAttribute('data-hint', '1');
+    setTimeout(function () { b.textContent = '+ Row'; ed.removeAttribute('data-hint'); }, 1500);
+  }
+
+  // ---- toolbar ----
+  // Stop the buttons from stealing focus (which would close the keyboard
+  // and lose the selection).
+  bar.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  bar.addEventListener('pointerdown', function (e) { if (e.target.closest('button')) e.preventDefault(); });
+
+  bar.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b || sourceMode) return;
+    restoreSel();
+    if (b.dataset.cmd) {
+      document.execCommand(b.dataset.cmd, false, null);
+    } else if (b.dataset.block) {
+      var tag = b.dataset.block;
+      var cur = (document.queryCommandValue('formatBlock') || '').toLowerCase();
+      document.execCommand('formatBlock', false, cur === tag && tag !== 'p' ? 'p' : tag);
+    } else if (b.dataset.act && acts[b.dataset.act]) {
+      acts[b.dataset.act]();
+    }
+    saveSel();
+    notify();
+  });
+
+  function updateState() {
+    var btns = bar.querySelectorAll('[data-state]');
+    for (var i = 0; i < btns.length; i++) {
+      var on = false;
+      try { on = document.queryCommandState(btns[i].dataset.state); } catch (e) {}
+      btns[i].classList.toggle('on', !!on);
+    }
+    var block = '';
+    try { block = (document.queryCommandValue('formatBlock') || '').toLowerCase(); } catch (e) {}
+    var bb = bar.querySelectorAll('[data-block]');
+    for (var j = 0; j < bb.length; j++) bb[j].classList.toggle('on', bb[j].dataset.block === block && block !== 'p');
+  }
+})();
+</script>
+</body>
+</html>

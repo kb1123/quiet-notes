@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+// CI passes -PbuildNumber so every release can install over the last one.
+def buildNumber = (project.findProperty('buildNumber') ?: '1').toString().toInteger()
+
+android {
+    namespace 'com.kb1123.quietnotes'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.kb1123.quietnotes'
+        minSdk 29
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.0.${buildNumber}"
+    }
+
+    // One fixed key so updates install over older versions.
+    // See README: this is a convenience key for a personal sideloaded app.
+    signingConfigs {
+        shared {
+            storeFile file('../signing/quietnotes.keystore')
+            storePassword 'quietnotes'
+            keyAlias 'quietnotes'
+            keyPassword 'quietnotes'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+        debug {
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+// No dependencies on purpose: no ads SDKs, no analytics, nothing.
