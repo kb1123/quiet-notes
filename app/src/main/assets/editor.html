@@ -189,6 +189,7 @@
   window.setContent = function (html) {
     hideImgBar();
     ed.innerHTML = html || '';
+    ensureTrailingLine();
     hydrate();
     src.value = serialize();
     updateState();
@@ -225,6 +226,7 @@
     hidePop();
     if (sourceMode) {
       ed.innerHTML = src.value;
+      ensureTrailingLine();
       hydrate();
       sourceMode = false;
       document.body.classList.remove('source');
@@ -238,7 +240,7 @@
     notify();
   };
 
-  ed.addEventListener('input', function () { hideImgBar(); notify(); });
+  ed.addEventListener('input', function () { hideImgBar(); ensureTrailingLine(); notify(); });
   src.addEventListener('input', notify);
 
   // ---- selection helpers ----
@@ -273,6 +275,95 @@
     s.removeAllRanges();
     s.addRange(r);
   }
+
+  // ---- getting out of tables ----
+  // A table (or divider) at the very end of a note would leave nowhere for the
+  // cursor to go below it, so keep an empty line after it.
+  var NEEDS_LINE_AFTER = /^(TABLE|HR)$/;
+  function isBlank(n) {
+    return !n.textContent.replace(/[\s​]/g, '') && !(n.tagName === 'IMG' || (n.querySelector && n.querySelector('img')));
+  }
+  function lastBlock() {
+    for (var n = ed.lastChild; n; n = n.previousSibling) {
+      if (n.nodeType === 1) return n;
+      if (n.nodeType === 3 && n.textContent.trim()) return null;
+    }
+    return null;
+  }
+  function ensureLineAfter(node) {
+    var next = node.nextElementSibling;
+    if (next && !NEEDS_LINE_AFTER.test(next.tagName)) return next;
+    var line = document.createElement('p');
+    line.appendChild(document.createElement('br'));
+    node.parentNode.insertBefore(line, node.nextSibling);
+    return line;
+  }
+  function ensureTrailingLine() {
+    var b = lastBlock();
+    if (b && NEEDS_LINE_AFTER.test(b.tagName)) ensureLineAfter(b);
+  }
+  function caretToEnd(node) {
+    var r = document.createRange();
+    r.selectNodeContents(node);
+    r.collapse(false);
+    var s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+  function caretAtCellEnd(cell) {
+    var s = window.getSelection();
+    if (!s.rangeCount || !s.isCollapsed) return false;
+    var r = s.getRangeAt(0);
+    var rest = document.createRange();
+    rest.setStart(r.endContainer, r.endOffset);
+    rest.setEnd(cell, cell.childNodes.length);
+    var frag = rest.cloneContents();
+    return !frag.textContent.replace(/[\s​]/g, '') && !frag.querySelector('img');
+  }
+  function lastLineEmpty(cell) {
+    if (isBlank(cell)) return true;
+    return /\n[ \t ​]*$/.test(cell.innerText);
+  }
+  // Drops empty lines at the end of a cell (the one Enter just made).
+  function trimCell(cell) {
+    for (var n = cell.lastChild; n; n = cell.lastChild) {
+      if ((n.nodeType === 3 && !n.textContent.replace(/[\s​]/g, '')) ||
+          (n.nodeType === 1 && (n.tagName === 'BR' || (n.tagName !== 'IMG' && isBlank(n))))) {
+        cell.removeChild(n);
+      } else {
+        break;
+      }
+    }
+    if (!cell.firstChild) cell.appendChild(document.createElement('br'));
+  }
+  // Enter on an empty line in a cell: go to the cell below, or out of the
+  // table from the last row.
+  function leaveCell(cell) {
+    trimCell(cell);
+    var tr = cell.parentNode, table = tr.closest('table');
+    var next = table.rows[tr.rowIndex + 1];
+    if (next) caretToEnd(next.cells[Math.min(cell.cellIndex, next.cells.length - 1)]);
+    else placeCaret(ensureLineAfter(table));
+    saveSel();
+    notify();
+  }
+  ed.addEventListener('beforeinput', function (e) {
+    if (e.inputType !== 'insertParagraph' && e.inputType !== 'insertLineBreak') return;
+    var cell = cellAtCaret();
+    if (!cell || !caretAtCellEnd(cell) || !lastLineEmpty(cell)) return;
+    e.preventDefault();
+    leaveCell(cell);
+  });
+  // Tapping the empty space below the note puts the cursor on its last line.
+  ed.addEventListener('click', function (e) {
+    if (e.target !== ed) return;
+    var b = lastBlock();
+    if (!b || e.clientY <= b.getBoundingClientRect().bottom) return;
+    ensureTrailingLine();
+    caretToEnd(lastBlock());
+    saveSel();
+    updateState();
+  });
 
   function emptyCell(tag) {
     var c = document.createElement(tag);
