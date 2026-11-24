@@ -36,7 +36,7 @@ import java.util.Locale;
 import java.util.Set;
 
 public class MainActivity extends Activity {
-    private static final int MENU_EXPORT = 1, MENU_IMPORT = 2, MENU_ABOUT = 3;
+    private static final int MENU_EXPORT = 1, MENU_IMPORT = 2, MENU_ABOUT = 3, MENU_THEME = 4;
     private static final int REQ_EXPORT = 1, REQ_IMPORT = 2;
 
     private NoteStore store;
@@ -45,6 +45,12 @@ public class MainActivity extends Activity {
     private NoteAdapter adapter;
     private EditText search;
     private TextView emptyView;
+    private int themeStamp;
+
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(Theme.wrap(base));
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -100,6 +106,8 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         setContentView(root);
+        Theme.style(this);
+        themeStamp = Theme.stamp(this);
     }
 
     private LinearLayout.LayoutParams barParams() {
@@ -113,6 +121,7 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(label);
         b.setAllCaps(false);
+        Theme.button(b, Theme.palette(this));
         b.setOnClickListener(v -> {
             Intent i = new Intent(this, editorFor(type));
             startActivity(i);
@@ -137,6 +146,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (Theme.stamp(this) != themeStamp) {
+            recreate(); // theme changed in Settings
+            return;
+        }
         reload();
     }
 
@@ -179,6 +192,7 @@ public class MainActivity extends Activity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(0, MENU_THEME, 0, "Theme & fonts");
         menu.add(0, MENU_EXPORT, 0, "Export backup");
         menu.add(0, MENU_IMPORT, 0, "Import backup");
         menu.add(0, MENU_ABOUT, 0, "About & privacy");
@@ -203,6 +217,9 @@ public class MainActivity extends Activity {
                 startActivityForResult(i, REQ_IMPORT);
                 return true;
             }
+            case MENU_THEME:
+                startActivity(new Intent(this, SettingsActivity.class));
+                return true;
             case MENU_ABOUT:
                 new AlertDialog.Builder(this)
                         .setTitle("Quiet Notes")
@@ -349,6 +366,9 @@ public class MainActivity extends Activity {
 
         void bind(Note n) {
             String p = n.preview();
+            Typeface face = Theme.typeface(getContext());
+            title.setTypeface(Typeface.create(face, Typeface.BOLD));
+            preview.setTypeface(face);
             title.setText(n.title.isEmpty() ? (p.isEmpty() ? "(empty)" : "Untitled") : n.title);
             int flags = DateUtils.isToday(n.updated)
                     ? DateUtils.FORMAT_SHOW_TIME

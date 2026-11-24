@@ -70,6 +70,7 @@ public class RichEditorActivity extends EditorBase {
             public void onPageFinished(WebView view, String url) {
                 if (pageReady) return;
                 pageReady = true;
+                view.evaluateJavascript("setTheme(" + Theme.editorJson(RichEditorActivity.this) + ")", null);
                 view.evaluateJavascript("setContent(" + JSONObject.quote(latestHtml) + ")", null);
                 loadImagesInto(latestHtml);
                 for (String[] p : pendingInserts) sendInsert(p[0], p[1]);

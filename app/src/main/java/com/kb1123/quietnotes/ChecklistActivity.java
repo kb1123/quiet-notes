@@ -65,6 +65,7 @@ public class ChecklistActivity extends EditorBase {
         Button add = new Button(this);
         add.setText("Add");
         add.setAllCaps(false);
+        Theme.button(add, Theme.palette(this));
         add.setOnClickListener(v -> addFromField());
         addRow.addView(add);
         box.addView(addRow);
@@ -98,7 +99,10 @@ public class ChecklistActivity extends EditorBase {
         if (any) render();
     }
 
+    private Theme.Palette palette;
+
     private void render() {
+        palette = Theme.palette(this);
         listBox.removeAllViews();
         int checkedCount = 0;
         for (Note.Item it : items) {
@@ -137,6 +141,7 @@ public class ChecklistActivity extends EditorBase {
 
         CheckBox cb = new CheckBox(this);
         cb.setChecked(it.checked);
+        Theme.checkbox(cb, palette);
         cb.setOnClickListener(v -> {
             it.checked = cb.isChecked();
             render();
@@ -145,7 +150,8 @@ public class ChecklistActivity extends EditorBase {
 
         TextView tv = new TextView(this);
         tv.setText(it.text);
-        tv.setTextSize(17);
+        tv.setTextSize(Theme.textSize(this) + 1);
+        tv.setTypeface(Theme.typeface(this));
         tv.setPadding(Ui.dp(this, 4), p, 0, p);
         if (it.checked) {
             tv.setPaintFlags(tv.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);

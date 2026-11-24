@@ -39,6 +39,10 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false" />
+
         <!-- Hands the camera app a place to save one photo. Not exported:
              only apps we explicitly grant access to can use it. -->
         <provider

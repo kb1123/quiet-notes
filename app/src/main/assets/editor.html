@@ -16,7 +16,7 @@
     }
   }
   html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
-  body { font: 16px/1.5 system-ui, Roboto, sans-serif; }
+  body { font-size: var(--size, 16px); line-height: 1.5; font-family: var(--font, system-ui, Roboto, sans-serif); }
 
   #bar {
     position: sticky; top: 0; z-index: 2;
@@ -68,6 +68,25 @@
     background: var(--btn); color: var(--fg); font: 600 14px system-ui, Roboto, sans-serif;
   }
   #imgbar button.on { background: var(--btn-on); color: var(--btn-on-fg); border-color: var(--btn-on); }
+  #bar button.open { border-color: var(--btn-on); box-shadow: inset 0 -3px 0 var(--btn-on); }
+  .a-color { border-bottom: 3px solid #d64545; padding: 0 2px; }
+  .a-hl { background: rgba(255,214,0,.55); padding: 0 3px; border-radius: 3px; }
+  #pop {
+    position: fixed; left: 8px; right: 8px; z-index: 4; display: none;
+    padding: 10px; background: var(--bar); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.28);
+    font: 14px system-ui, Roboto, sans-serif;
+  }
+  #pop .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #pop .row + .row { margin-top: 10px; }
+  #pop .lbl { width: 100%; font-size: 12px; color: var(--muted); margin: 0 0 -2px; }
+  #pop button {
+    min-width: 40px; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--btn); color: var(--fg); font: 600 15px system-ui, Roboto, sans-serif;
+  }
+  #pop button.sw { width: 40px; min-width: 40px; padding: 0; border-radius: 50%; }
+  #pop button.on { background: var(--btn-on); color: var(--btn-on-fg); border-color: var(--btn-on); }
+  #pop .msg { color: var(--muted); padding: 6px 2px; }
   #ed table { border-collapse: collapse; margin: .7em 0; display: block; overflow-x: auto; max-width: 100%; }
   #ed th, #ed td { border: 1px solid var(--line); padding: 6px 9px; min-width: 3.5em; vertical-align: top; }
   #ed th { background: var(--th); text-align: left; }
@@ -88,6 +107,9 @@
   <button data-cmd="italic" data-state="italic"><i>I</i></button>
   <button data-cmd="underline" data-state="underline"><u>U</u></button>
   <button data-cmd="strikeThrough" data-state="strikeThrough"><s>S</s></button>
+  <button data-pop="color" aria-label="Text color"><span class="a-color">A</span></button>
+  <button data-pop="hilite" aria-label="Highlight"><span class="a-hl">ab</span></button>
+  <button data-pop="font" aria-label="Font and size">Aa</button>
   <span class="sep"></span>
   <button data-cmd="insertUnorderedList" data-state="insertUnorderedList" aria-label="Bullet list">• List</button>
   <button data-cmd="insertOrderedList" data-state="insertOrderedList" aria-label="Numbered list">1. List</button>
@@ -98,6 +120,7 @@
   <button data-act="colAdd">+ Col</button>
   <button data-act="rowDel">− Row</button>
   <button data-act="colDel">− Col</button>
+  <button data-pop="shade" aria-label="Shade table cells">▦ Shade</button>
   <span class="sep"></span>
   <button data-act="image">🖼 Image</button>
   <button data-act="link">🔗 Link</button>
@@ -105,6 +128,7 @@
   <button data-cmd="removeFormat" aria-label="Clear formatting">⌫ Fmt</button>
 </div>
 <div id="ed" contenteditable="true" spellcheck="true"></div>
+<div id="pop"></div>
 <div id="imgbox"></div>
 <div id="imgbar">
   <button data-w="33%">S</button>
@@ -127,6 +151,17 @@
   var imgbar = document.getElementById('imgbar');
 
   try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) {}
+  try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
+
+  // Colours/fonts chosen in the app's Theme & fonts settings.
+  window.setTheme = function (t) {
+    var r = document.documentElement.style;
+    for (var k in t) {
+      if (k === 'scheme') r.colorScheme = t[k];
+      else r.setProperty('--' + k, t[k]);
+    }
+    placeImgBar();
+  };
 
   // The note text keeps only <img data-qn="ID">; the actual picture data is
   // added for display and stripped again before handing HTML back to the app.
@@ -187,6 +222,7 @@
 
   window.toggleSource = function () {
     hideImgBar();
+    hidePop();
     if (sourceMode) {
       ed.innerHTML = src.value;
       hydrate();
@@ -391,6 +427,182 @@
     setTimeout(function () { b.textContent = '+ Row'; ed.removeAttribute('data-hint'); }, 1500);
   }
 
+  // ---- per-note colours, fonts and cell shading ----
+  // Colours are chosen to stay readable in both light and dark themes.
+  var TEXT_COLORS = [['Red', '#d64545'], ['Orange', '#d9822b'], ['Gold', '#b8961e'], ['Green', '#3b9a5b'],
+                     ['Teal', '#2a9d9d'], ['Blue', '#3d7fd6'], ['Purple', '#8a5cd1'], ['Gray', '#8a8a8a']];
+  var HILITES = [['Yellow', 'rgba(255, 214, 0, 0.4)'], ['Green', 'rgba(80, 200, 120, 0.35)'],
+                 ['Blue', 'rgba(80, 160, 255, 0.35)'], ['Pink', 'rgba(255, 100, 160, 0.35)'],
+                 ['Orange', 'rgba(255, 150, 50, 0.38)'], ['Purple', 'rgba(160, 110, 255, 0.35)']];
+  var SHADES = [['Gray', 'rgba(128, 128, 128, 0.2)'], ['Yellow', 'rgba(255, 214, 0, 0.25)'],
+                ['Green', 'rgba(80, 200, 120, 0.22)'], ['Blue', 'rgba(80, 160, 255, 0.22)'],
+                ['Pink', 'rgba(255, 100, 160, 0.22)'], ['Orange', 'rgba(255, 150, 50, 0.25)'],
+                ['Purple', 'rgba(160, 110, 255, 0.22)']];
+  var FONTS = [['Sans', 'system-ui, Roboto, sans-serif'], ['Serif', "'Noto Serif', Georgia, serif"],
+               ['Mono', "'Roboto Mono', 'Droid Sans Mono', monospace"], ['Script', 'cursive']];
+  var SIZES = [['S', '2'], ['Normal', ''], ['L', '4'], ['XL', '5']];
+  var INLINE = /^(SPAN|FONT|B|STRONG|I|EM|U|S|STRIKE|A|SUB|SUP|MARK)$/;
+  var pop = document.getElementById('pop');
+  var popKind = null, popBtn = null, shadeScope = 'row';
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function swatch(name, color, act) {
+    var b = el('button', 'sw');
+    b.style.background = color;
+    b.setAttribute('aria-label', name);
+    b.dataset.v = act;
+    return b;
+  }
+  function plainBtn(label, act, on) {
+    var b = el('button', on ? 'on' : '', label);
+    b.dataset.v = act;
+    return b;
+  }
+
+  function buildPop(kind) {
+    pop.innerHTML = '';
+    var row = el('div', 'row');
+    if (kind === 'color') {
+      TEXT_COLORS.forEach(function (c) { row.appendChild(swatch(c[0], c[1], 'fc:' + c[1])); });
+      row.appendChild(plainBtn('Default', 'fc:'));
+      pop.appendChild(row);
+    } else if (kind === 'hilite') {
+      HILITES.forEach(function (c) { row.appendChild(swatch(c[0], c[1], 'hl:' + c[1])); });
+      row.appendChild(plainBtn('None', 'hl:'));
+      pop.appendChild(row);
+    } else if (kind === 'font') {
+      row.appendChild(el('div', 'lbl', 'Font'));
+      FONTS.forEach(function (f) {
+        var b = plainBtn(f[0], 'ff:' + f[1]);
+        b.style.fontFamily = f[1];
+        row.appendChild(b);
+      });
+      row.appendChild(plainBtn('Default', 'ff:'));
+      pop.appendChild(row);
+      var row2 = el('div', 'row');
+      row2.appendChild(el('div', 'lbl', 'Size'));
+      SIZES.forEach(function (z) { row2.appendChild(plainBtn(z[0], 'fs:' + z[1])); });
+      pop.appendChild(row2);
+    } else if (kind === 'shade') {
+      if (!cellAtCaret()) {
+        pop.appendChild(el('div', 'msg', 'Tap inside a table cell first, then choose a color.'));
+        return;
+      }
+      row.appendChild(el('div', 'lbl', 'Apply to'));
+      [['Cell', 'cell'], ['Row', 'row'], ['Column', 'col']].forEach(function (o) {
+        row.appendChild(plainBtn(o[0], 'scope:' + o[1], shadeScope === o[1]));
+      });
+      pop.appendChild(row);
+      var row3 = el('div', 'row');
+      SHADES.forEach(function (c) { row3.appendChild(swatch(c[0], c[1], 'sh:' + c[1])); });
+      row3.appendChild(plainBtn('None', 'sh:'));
+      row3.appendChild(plainBtn('✓ Done', 'done:'));
+      pop.appendChild(row3);
+    }
+  }
+
+  function togglePop(kind, btn) {
+    if (popKind === kind) return hidePop();
+    hidePop();
+    hideImgBar();
+    popKind = kind;
+    popBtn = btn;
+    btn.classList.add('open');
+    buildPop(kind);
+    pop.style.top = (bar.getBoundingClientRect().bottom + 6) + 'px';
+    pop.style.display = 'block';
+  }
+  function hidePop() {
+    if (popBtn) popBtn.classList.remove('open');
+    popKind = null;
+    popBtn = null;
+    pop.style.display = 'none';
+  }
+
+  function unwrap(node) {
+    var parent = node.parentNode;
+    while (node.firstChild) parent.insertBefore(node.firstChild, node);
+    parent.removeChild(node);
+  }
+
+  // Removes one style (e.g. colour) from the selected text, leaving other formatting alone.
+  function clearStyle(prop) {
+    var s = window.getSelection();
+    if (!s.rangeCount) return;
+    var r = s.getRangeAt(0);
+    var root = r.commonAncestorContainer;
+    if (root.nodeType === 3) root = root.parentNode;
+    var list = [];
+    for (var a = root; a && a !== ed; a = a.parentNode) list.push(a);
+    var inner = root.querySelectorAll ? root.querySelectorAll('*') : [];
+    for (var i = 0; i < inner.length; i++) if (r.intersectsNode(inner[i])) list.push(inner[i]);
+    list.forEach(function (n) {
+      if (!INLINE.test(n.tagName)) return;
+      if (n.style && n.style[prop]) {
+        n.style[prop] = '';
+        if (!n.getAttribute('style')) n.removeAttribute('style');
+      }
+      if (n.tagName === 'FONT') {
+        if (prop === 'color') n.removeAttribute('color');
+        if (prop === 'fontFamily') n.removeAttribute('face');
+        if (prop === 'fontSize') n.removeAttribute('size');
+      }
+      if ((n.tagName === 'SPAN' || n.tagName === 'FONT') && n.attributes.length === 0 && n.parentNode) unwrap(n);
+    });
+  }
+
+  function shadeCells(color) {
+    var cell = cellAtCaret();
+    if (!cell) return;
+    var table = cell.closest('table');
+    var cells = [];
+    if (shadeScope === 'row') {
+      cells = Array.prototype.slice.call(cell.parentNode.cells);
+    } else if (shadeScope === 'col') {
+      for (var i = 0; i < table.rows.length; i++) {
+        var c = table.rows[i].cells[cell.cellIndex];
+        if (c) cells.push(c);
+      }
+    } else {
+      cells = [cell];
+    }
+    cells.forEach(function (c) {
+      c.style.backgroundColor = color;
+      if (!c.getAttribute('style')) c.removeAttribute('style');
+    });
+  }
+
+  pop.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  pop.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+  pop.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b) return;
+    var v = b.dataset.v, i = v.indexOf(':');
+    var kind = v.slice(0, i), val = v.slice(i + 1);
+    if (kind === 'done') return hidePop();
+    restoreSel();
+    if (kind === 'scope') {
+      shadeScope = val;
+      buildPop('shade');
+      return;
+    }
+    if (kind === 'fc') { if (val) document.execCommand('foreColor', false, val); else clearStyle('color'); }
+    else if (kind === 'hl') { if (val) document.execCommand('hiliteColor', false, val); else clearStyle('backgroundColor'); }
+    else if (kind === 'ff') { if (val) document.execCommand('fontName', false, val); else clearStyle('fontFamily'); }
+    else if (kind === 'fs') { if (val) document.execCommand('fontSize', false, val); else clearStyle('fontSize'); }
+    else if (kind === 'sh') { shadeCells(val); }
+    saveSel();
+    notify();
+    if (kind !== 'sh') hidePop();
+  });
+  ed.addEventListener('click', hidePop);
+  ed.addEventListener('input', hidePop);
+
   // ---- toolbar ----
   // Stop the buttons from stealing focus (which would close the keyboard
   // and lose the selection).
@@ -409,7 +621,12 @@
       document.execCommand('formatBlock', false, cur === tag && tag !== 'p' ? 'p' : tag);
     } else if (b.dataset.act && acts[b.dataset.act]) {
       acts[b.dataset.act]();
+    } else if (b.dataset.pop) {
+      saveSel();
+      togglePop(b.dataset.pop, b);
+      return;
     }
+    hidePop();
     saveSel();
     notify();
   });

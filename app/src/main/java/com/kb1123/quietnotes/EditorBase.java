@@ -46,6 +46,11 @@ public abstract class EditorBase extends Activity {
     protected boolean isNew() { return note.id < 0; }
 
     @Override
+    protected void attachBaseContext(android.content.Context base) {
+        super.attachBaseContext(Theme.wrap(base));
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         store = NoteStore.get(this);
@@ -73,7 +78,7 @@ public abstract class EditorBase extends Activity {
         titleView = new EditText(this);
         titleView.setHint("Title");
         titleView.setTextSize(20);
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
+        titleView.setTypeface(Typeface.create(Theme.typeface(this), Typeface.BOLD));
         titleView.setSingleLine(true);
         titleView.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         titleView.setText(note.title);
@@ -86,6 +91,7 @@ public abstract class EditorBase extends Activity {
         root.addView(buildBody(), new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
+        Theme.style(this);
         loadBody(note.body);
     }
 

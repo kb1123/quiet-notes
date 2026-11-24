@@ -22,7 +22,8 @@ public class PlainEditorActivity extends EditorBase {
                 | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         bodyView.setHorizontallyScrolling(false);
         bodyView.setHint("Start typing…");
-        bodyView.setTextSize(16);
+        bodyView.setTextSize(Theme.textSize(this));
+        bodyView.setTypeface(Theme.typeface(this));
         bodyView.setLineSpacing(0, 1.15f);
         bodyView.setBackground(null);
         int p = Ui.dp(this, 16);
