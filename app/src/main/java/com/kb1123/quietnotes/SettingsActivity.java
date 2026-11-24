@@ -87,7 +87,7 @@ public class SettingsActivity extends Activity {
 
         col.addView(heading("Font", p));
         Typeface[] faces = new Typeface[Theme.FONT_NAMES.length];
-        for (int i = 0; i < faces.length; i++) faces[i] = Theme.typeface(i);
+        for (int i = 0; i < faces.length; i++) faces[i] = Theme.typefaceAt(i);
         col.addView(segmented(Theme.FONT_NAMES, faces, Theme.font(this), p, i -> {
             Theme.setInt(this, "font", i);
             rebuild();

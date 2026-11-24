@@ -142,7 +142,7 @@ final class Theme {
     }
 
     static Typeface typeface(Context c) { return FONT_FACES[font(c)]; }
-    static Typeface typeface(int i) { return FONT_FACES[clamp(i, FONT_FACES.length)]; }
+    static Typeface typefaceAt(int i) { return FONT_FACES[clamp(i, FONT_FACES.length)]; }
     static int textSize(Context c) { return SIZES[size(c)]; }
 
     private static String css(int color) {
