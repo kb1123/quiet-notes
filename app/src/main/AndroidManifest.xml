@@ -38,5 +38,13 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- Hands the camera app a place to save one photo. Not exported:
+             only apps we explicitly grant access to can use it. -->
+        <provider
+            android:name=".CaptureProvider"
+            android:authorities="com.kb1123.quietnotes.capture"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>

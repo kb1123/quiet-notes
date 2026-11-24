@@ -45,7 +45,9 @@ public class Note {
         if (body == null) return "";
         switch (type) {
             case RICH:
-                return Html.fromHtml(body, Html.FROM_HTML_MODE_COMPACT).toString().trim();
+                // ￼ is the placeholder Android uses for images; drop it from text.
+                return Html.fromHtml(body, Html.FROM_HTML_MODE_COMPACT).toString()
+                        .replace("￼", "").trim();
             case LIST: {
                 StringBuilder sb = new StringBuilder();
                 for (Item it : parseItems(body)) {

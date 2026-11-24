@@ -6,6 +6,7 @@ A small Android notes app with no ads, no tracking and no internet access.
 
 - **Notes**: plain text.
 - **Rich notes**: headings, bold/italic/underline/strikethrough, bullet and numbered lists, quotes, tables (add/remove rows and columns), links and dividers. Export as a standalone `.html` file, or edit the HTML source directly.
+- **Images in rich notes**: tap 🖼 Image to take a photo or pick images from your files; they're placed at the cursor (also inside table cells). Tap an image to make it small, medium or full width, or remove it. Photos are shrunk to 1600px on the long edge and stored privately in the app; HTML exports have the pictures embedded, and backups include them.
 - **Lists**: checkable lists for groceries and the like. Tap an item to tick it (ticked items move to the bottom), long-press to edit or delete. "Untick all" resets a list for next week's shop.
 - Search across all notes, share any note as text, export plain notes and lists as `.txt`.
 - **Backup**: export all notes to one JSON file and import it again (on a new phone, say). Importing skips notes you already have.
@@ -17,6 +18,7 @@ A small Android notes app with no ads, no tracking and no internet access.
 - No third-party libraries: no ad SDKs, analytics or crash reporters.
 - Android cloud backup is switched off for this app; your notes live only in the app's private storage until you export them.
 - Files are written or read only through Android's own file picker, and only when you ask.
+- Photos are taken by your own camera app, which hands the picture back; Quiet Notes itself has no camera or storage permission.
 
 ## Install
 

@@ -37,7 +37,7 @@
     display: block; box-sizing: border-box; width: 100%;
     min-height: calc(100vh - 56px); padding: 12px 16px 40vh; outline: none;
   }
-  #ed:empty::before { content: "Start writing… use the toolbar for headings, lists and tables."; color: var(--muted); }
+  #ed:empty::before { content: "Start writing… use the toolbar for headings, lists, tables and images."; color: var(--muted); }
   #src {
     display: none; border: 0; resize: none; background: var(--bg); color: var(--fg);
     font: 14px/1.45 ui-monospace, monospace;
@@ -52,7 +52,22 @@
   #ed p { margin: .4em 0; }
   #ed blockquote { border-left: 3px solid var(--line); margin: .6em 0; padding-left: 12px; color: var(--muted); }
   #ed a { color: var(--btn-on); }
-  #ed img { max-width: 100%; }
+  #ed img { max-width: 100%; height: auto; vertical-align: bottom; border-radius: 4px; }
+  #ed img[data-qn]:not([src]) { min-width: 6em; min-height: 4em; border: 1px dashed var(--line); }
+  #imgbox {
+    position: absolute; display: none; pointer-events: none; z-index: 1;
+    border: 2px solid var(--btn-on); border-radius: 4px; box-sizing: border-box;
+  }
+  #imgbar {
+    position: absolute; display: none; z-index: 3; gap: 4px; padding: 4px;
+    background: var(--bar); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.25);
+  }
+  #imgbar button {
+    min-width: 40px; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--btn); color: var(--fg); font: 600 14px system-ui, Roboto, sans-serif;
+  }
+  #imgbar button.on { background: var(--btn-on); color: var(--btn-on-fg); border-color: var(--btn-on); }
   #ed table { border-collapse: collapse; margin: .7em 0; display: block; overflow-x: auto; max-width: 100%; }
   #ed th, #ed td { border: 1px solid var(--line); padding: 6px 9px; min-width: 3.5em; vertical-align: top; }
   #ed th { background: var(--th); text-align: left; }
@@ -84,11 +99,19 @@
   <button data-act="rowDel">− Row</button>
   <button data-act="colDel">− Col</button>
   <span class="sep"></span>
+  <button data-act="image">🖼 Image</button>
   <button data-act="link">🔗 Link</button>
   <button data-act="hr" aria-label="Divider">―</button>
   <button data-cmd="removeFormat" aria-label="Clear formatting">⌫ Fmt</button>
 </div>
 <div id="ed" contenteditable="true" spellcheck="true"></div>
+<div id="imgbox"></div>
+<div id="imgbar">
+  <button data-w="33%">S</button>
+  <button data-w="66%">M</button>
+  <button data-w="">Full</button>
+  <button data-w="del" aria-label="Remove image">✕ Remove</button>
+</div>
 <textarea id="src" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea>
 
 <script>
@@ -98,10 +121,30 @@
   var bar = document.getElementById('bar');
   var sourceMode = false;
   var savedRange = null;
+  var imgCache = {};     // image id -> data: URL (pictures live in the app, not in the note text)
+  var selImg = null;     // image currently tapped, if any
+  var imgbox = document.getElementById('imgbox');
+  var imgbar = document.getElementById('imgbar');
 
   try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (e) {}
 
-  function current() { return sourceMode ? src.value : ed.innerHTML; }
+  // The note text keeps only <img data-qn="ID">; the actual picture data is
+  // added for display and stripped again before handing HTML back to the app.
+  function serialize() {
+    var c = ed.cloneNode(true);
+    var imgs = c.querySelectorAll('img[data-qn]');
+    for (var i = 0; i < imgs.length; i++) imgs[i].removeAttribute('src');
+    return c.innerHTML;
+  }
+  function hydrate() {
+    var imgs = ed.querySelectorAll('img[data-qn]');
+    for (var i = 0; i < imgs.length; i++) {
+      var u = imgCache[imgs[i].getAttribute('data-qn')];
+      if (u && imgs[i].getAttribute('src') !== u) imgs[i].setAttribute('src', u);
+    }
+  }
+
+  function current() { return sourceMode ? src.value : serialize(); }
 
   function notify() {
     if (window.Android && Android.onChange) Android.onChange(current());
@@ -109,20 +152,49 @@
   }
 
   window.setContent = function (html) {
+    hideImgBar();
     ed.innerHTML = html || '';
-    src.value = ed.innerHTML;
+    hydrate();
+    src.value = serialize();
     updateState();
+  };
+
+  window.loadImages = function (map) {
+    for (var k in map) if (Object.prototype.hasOwnProperty.call(map, k)) imgCache[k] = map[k];
+    hydrate();
+  };
+
+  window.insertImage = function (id, dataUri) {
+    imgCache[id] = dataUri;
+    if (sourceMode) window.toggleSource();
+    ed.focus();
+    var s = window.getSelection();
+    s.removeAllRanges();
+    if (savedRange && ed.contains(savedRange.startContainer)) {
+      s.addRange(savedRange);
+    } else {
+      var r = document.createRange();
+      r.selectNodeContents(ed);
+      r.collapse(false);
+      s.addRange(r);
+    }
+    document.execCommand('insertHTML', false, '<img data-qn="' + id + '" src="' + dataUri + '">');
+    hydrate();   // in case the browser dropped the src while inserting
+    saveSel();
+    notify();
   };
   window.getContent = current;
 
   window.toggleSource = function () {
+    hideImgBar();
     if (sourceMode) {
       ed.innerHTML = src.value;
+      hydrate();
       sourceMode = false;
       document.body.classList.remove('source');
       ed.focus();
     } else {
-      src.value = ed.innerHTML;
+      src.value = serialize();
       sourceMode = true;
       document.body.classList.add('source');
       src.focus();
@@ -130,7 +202,7 @@
     notify();
   };
 
-  ed.addEventListener('input', notify);
+  ed.addEventListener('input', function () { hideImgBar(); notify(); });
   src.addEventListener('input', notify);
 
   // ---- selection helpers ----
@@ -243,8 +315,72 @@
         document.execCommand('createLink', false, url);
       }
     },
-    hr: function () { document.execCommand('insertHorizontalRule'); }
+    hr: function () { document.execCommand('insertHorizontalRule'); },
+    image: function () {
+      saveSel();
+      if (window.Android && Android.pickImage) Android.pickImage();
+    }
   };
+
+  // ---- tapping an image: S / M / Full / Remove ----
+  function placeImgBar() {
+    if (!selImg || !ed.contains(selImg)) return hideImgBar();
+    var r = selImg.getBoundingClientRect();
+    var x = r.left + window.scrollX, y = r.top + window.scrollY;
+    imgbox.style.left = x + 'px'; imgbox.style.top = y + 'px';
+    imgbox.style.width = r.width + 'px'; imgbox.style.height = r.height + 'px';
+    imgbox.style.display = 'block';
+    imgbar.style.display = 'flex';
+    var bw = imgbar.offsetWidth, bh = imgbar.offsetHeight;
+    var left = Math.max(8, Math.min(x + r.width / 2 - bw / 2, window.scrollX + document.documentElement.clientWidth - bw - 8));
+    var top = y + Math.min(r.height, 120) - bh - 8;
+    if (top < window.scrollY + bar.offsetHeight + 4) top = y + 8;
+    imgbar.style.left = left + 'px'; imgbar.style.top = top + 'px';
+    var w = selImg.style.width || '';
+    var bs = imgbar.querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) bs[i].classList.toggle('on', bs[i].dataset.w === w);
+  }
+  function hideImgBar() {
+    selImg = null;
+    imgbox.style.display = 'none';
+    imgbar.style.display = 'none';
+  }
+
+  ed.addEventListener('click', function (e) {
+    if (e.target.tagName === 'IMG') {
+      selImg = e.target;
+      // Put the caret just after the image so typing continues there.
+      var r = document.createRange();
+      r.setStartAfter(selImg);
+      r.collapse(true);
+      var s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      saveSel();
+      placeImgBar();
+    } else {
+      hideImgBar();
+    }
+  });
+  window.addEventListener('resize', placeImgBar);
+  imgbar.addEventListener('mousedown', function (e) { e.preventDefault(); });
+  imgbar.addEventListener('pointerdown', function (e) { e.preventDefault(); });
+  imgbar.addEventListener('click', function (e) {
+    var b = e.target.closest('button');
+    if (!b || !selImg) return;
+    var w = b.dataset.w;
+    if (w === 'del') {
+      selImg.remove();
+      hideImgBar();
+    } else {
+      selImg.removeAttribute('width');
+      selImg.removeAttribute('height');
+      selImg.style.width = w;
+      if (!selImg.getAttribute('style')) selImg.removeAttribute('style');
+      placeImgBar();
+    }
+    notify();
+  });
 
   function hint() {
     var old = ed.getAttribute('data-hint');

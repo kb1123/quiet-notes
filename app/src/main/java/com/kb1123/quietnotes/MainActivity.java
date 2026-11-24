@@ -144,6 +144,7 @@ public class MainActivity extends Activity {
         allNotes.clear();
         allNotes.addAll(store.all());
         applyFilter();
+        ImageStore.sweep(this, allNotes);
     }
 
     private void applyFilter() {
@@ -208,7 +209,9 @@ public class MainActivity extends Activity {
                         .setMessage("Everything stays on this phone.\n\n"
                                 + "• No internet permission (the app cannot go online)\n"
                                 + "• No ads, analytics or accounts\n"
-                                + "• Android cloud backup is off for this app\n\n"
+                                + "• Android cloud backup is off for this app\n"
+                                + "• Photos are taken by your own camera app and handed over; "
+                                + "Quiet Notes has no camera or storage permission\n\n"
                                 + "Use \"Export backup\" now and then to keep your own copy.\n\n"
                                 + "Tip: long-press a note in the list to delete it.")
                         .setPositiveButton("OK", null)
@@ -243,7 +246,13 @@ public class MainActivity extends Activity {
 
     private String backupJson() throws JSONException {
         JSONArray arr = new JSONArray();
-        for (Note n : store.all()) {
+        List<Note> notes = store.all();
+        JSONObject images = new JSONObject();
+        for (String id : ImageStore.refs(notes)) {
+            String b64 = ImageStore.base64(this, id);
+            if (b64 != null) images.put(id, b64);
+        }
+        for (Note n : notes) {
             JSONObject o = new JSONObject();
             o.put("type", n.type);
             o.put("title", n.title);
@@ -254,14 +263,24 @@ public class MainActivity extends Activity {
         }
         JSONObject root = new JSONObject();
         root.put("app", "QuietNotes");
-        root.put("version", 1);
+        root.put("version", 2);
         root.put("notes", arr);
+        root.put("images", images);
         return root.toString(2);
     }
 
     /** Adds notes from a backup, skipping ones that are already here. */
     private int importBackup(String json) throws JSONException {
-        JSONArray arr = new JSONObject(json).getJSONArray("notes");
+        JSONObject root = new JSONObject(json);
+        JSONArray arr = root.getJSONArray("notes");
+        JSONObject images = root.optJSONObject("images");   // absent in version 1 backups
+        if (images != null) {
+            java.util.Iterator<String> ids = images.keys();
+            while (ids.hasNext()) {
+                String id = ids.next();
+                ImageStore.restore(this, id, images.optString(id, null));
+            }
+        }
         Set<String> existing = new HashSet<>();
         for (Note n : store.all()) existing.add(key(n));
         int added = 0;
